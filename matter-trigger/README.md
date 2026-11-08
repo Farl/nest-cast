@@ -47,8 +47,7 @@ node trigger.mjs        # 要在 Claude Code 沙箱外執行：Matter 需要 inb
 
 ## 限制
 
-- 只能傳數字（0–100），不能傳文字。想傳文字，可以讓 Assistant 把句子寫進 Google Tasks 或行事曆，
-  再讓 Mac 去讀（還沒做）。
+- 只能傳數字（0–100），不能傳文字。文字改走 Google Tasks，見下一節。
 
 ## 後續：用 Google Tasks 傳文字（[../tasks-probe/](../tasks-probe/watch_tasks.py)）
 

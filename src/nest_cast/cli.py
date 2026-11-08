@@ -54,8 +54,12 @@ def _report(end_state: str) -> int:
 
 @_with_cast
 def cmd_say(cast, cfg, args):
-    url = media.tts_url(cfg.tts, args.text, args.lang)
-    return _report(media.play_url(cast, cfg.playback, url, cfg.tts.mime, args.volume))
+    for chunk in media.split_for_tts(args.text, cfg.tts.max_chars):
+        url = media.tts_url(cfg.tts, chunk, args.lang)
+        end_state = media.play_url(cast, cfg.playback, url, cfg.tts.mime, args.volume)
+        if end_state != "FINISHED":
+            break
+    return _report(end_state)
 
 
 @_with_cast

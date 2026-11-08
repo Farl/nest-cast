@@ -49,3 +49,12 @@ node trigger.mjs        # 要在 Claude Code 沙箱外執行：Matter 需要 inb
 
 - 只能傳數字（0–100），不能傳文字。想傳文字，可以讓 Assistant 把句子寫進 Google Tasks 或行事曆，
   再讓 Mac 去讀（還沒做）。
+
+## 後續：用 Google Tasks 傳文字（[../tasks-probe/](../tasks-probe/watch_tasks.py)）
+
+- 「Hey Google，提醒我請機器人查一個 AI 新聞」會在 Google Tasks 的 TODO 清單建立「機器人要幫我查一個AI新聞」。
+  Assistant 會改寫句子（拿掉「提醒我請」），到期日只有日期。
+- `watch_tasks.py` 用 `gws` 輪詢 `updatedMin` 之後的任務；看到門鈴的 TRIGGER 就改成每秒輪詢一段時間。
+- 2026-11-08 實測：任務建立後 0.2 秒讀到；由 Claude session 查新聞並用 `nest-cast say` 回覆，整個來回約 70 秒，
+  最花時間的是處理本身。門鈴加速還沒實測到。
+- 需要個人帳號的 `tasks.readonly` scope，以及該 GCP 專案啟用 Tasks API。

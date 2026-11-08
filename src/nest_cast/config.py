@@ -24,6 +24,7 @@ class TtsConfig:
     url_template: str
     lang: str
     mime: str
+    max_chars: int
 
 
 @dataclass(frozen=True)

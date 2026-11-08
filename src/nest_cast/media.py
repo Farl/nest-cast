@@ -24,8 +24,29 @@ ACTIVE_STATES = ("PLAYING", "BUFFERING")
 _ROUTE_PROBE_PORT = 1
 
 
+# Split points for long TTS text, strongest first (sentence ends, then clause breaks).
+_SENTENCE_BREAKS = "。！？!?\n"
+_CLAUSE_BREAKS = "，、；：,;: "
+
+
 def tts_url(cfg: TtsConfig, text: str, lang: str | None = None) -> str:
     return cfg.url_template.format(lang=lang or cfg.lang, text=urllib.parse.quote(text))
+
+
+def split_for_tts(text: str, max_chars: int) -> list[str]:
+    """Cut text into chunks of at most max_chars, preferring sentence then clause boundaries."""
+    chunks, rest = [], text.strip()
+    while len(rest) > max_chars:
+        window = rest[:max_chars]
+        cut = max((window.rfind(c) for c in _SENTENCE_BREAKS), default=-1)
+        if cut < 0:
+            cut = max((window.rfind(c) for c in _CLAUSE_BREAKS), default=-1)
+        cut = cut + 1 if cut >= 0 else max_chars
+        chunks.append(rest[:cut].strip())
+        rest = rest[cut:].strip()
+    if rest:
+        chunks.append(rest)
+    return [c for c in chunks if c]
 
 
 def play_url(cast: pychromecast.Chromecast, cfg: PlaybackConfig, url: str, mime: str,

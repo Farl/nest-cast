@@ -18,6 +18,9 @@ setup_http_timeout_sec = 5
 url_template = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl={lang}&q={text}"
 lang = "zh-TW"
 mime = "audio/mpeg"
+# The endpoint rejects long text, so `say` splits at punctuation into chunks of at most this many
+# characters and plays them in order.
+max_chars = 150
 
 [playback]
 # How long to wait for a clip to start and finish before giving up.

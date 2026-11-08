@@ -1,0 +1,13 @@
+{
+  "name": "matter-trigger",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node trigger.mjs"
+  },
+  "description": "Matter virtual light: Google Home routine -> trigger on this Mac",
+  "dependencies": {
+    "@matter/main": "^0.18.0"
+  },
+  "type": "module",
+  "private": "true"
+}

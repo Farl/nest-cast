@@ -60,7 +60,7 @@ uv run nest-cast --name 客廳 trace           # 印出狀態事件，除錯用
 - 開著 VPN 時，提供給喇叭的網址會用「通往喇叭那條路由」的本機 IP，
   不會誤用 VPN 的位址（踩過這個坑：拿到 172.18.x，喇叭連不到）。
 - TTS 用的是 Google Translate 的非正式端點，隨時可能失效；換掉 `[tts].url_template` 即可。
-- 只能「說」不能「聽」：Cast 協定拿不到麥克風，也沒辦法用語音觸發這裡的程式。
+- 只能「說」不能「聽」：Cast 協定拿不到麥克風。語音觸發要繞道 Matter，見 [matter-trigger/](matter-trigger/README.md)。
 
 ## 想過但還沒做的用法
 

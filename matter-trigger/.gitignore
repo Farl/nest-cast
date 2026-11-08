@@ -1,0 +1,4 @@
+node_modules/
+.matter-storage/
+events.jsonl
+*.log

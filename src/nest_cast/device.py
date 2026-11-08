@@ -34,16 +34,28 @@ def discover(cfg: DeviceConfig) -> list[pychromecast.CastInfo]:
     return [c.cast_info for c in casts]
 
 
+def _find_named(cfg: DeviceConfig, name: str) -> pychromecast.CastInfo | None:
+    """Look up one device by friendly name, returning as soon as it answers.
+
+    Unlike discover(), this does not wait out the whole timeout, which matters when a
+    speaker is slow to answer mDNS (e.g. while it is busy replying to a voice command).
+    """
+    infos, browser = pychromecast.discovery.discover_listed_chromecasts(
+        friendly_names=[name], discovery_timeout=cfg.discovery_timeout_sec)
+    browser.stop_discovery()
+    return infos[0] if infos else None
+
+
 def _pick(cfg: DeviceConfig, name: str | None) -> pychromecast.CastInfo:
-    """Choose one discovered device by friendly name, or the only one on the LAN."""
-    infos = discover(cfg)
-    found = ", ".join(i.friendly_name for i in infos) or "none"
+    """Choose one device by friendly name, or the only one on the LAN."""
     wanted = name or cfg.default_name
     if wanted:
-        matches = [i for i in infos if i.friendly_name == wanted]
-        if not matches:
-            raise DeviceNotFound(f"no device named {wanted!r} (found: {found})")
-        return matches[0]
+        info = _find_named(cfg, wanted)
+        if info is None:
+            raise DeviceNotFound(f"no device named {wanted!r} within {cfg.discovery_timeout_sec}s")
+        return info
+    infos = discover(cfg)
+    found = ", ".join(i.friendly_name for i in infos) or "none"
     if len(infos) != 1:
         raise DeviceNotFound(f"pass --name or --host; found {len(infos)} devices: {found}")
     return infos[0]

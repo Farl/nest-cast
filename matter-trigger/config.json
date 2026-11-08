@@ -1,0 +1,26 @@
+{
+  "_doc": "Settings for trigger.mjs. Override path with MATTER_TRIGGER_CONFIG.",
+  "device": {
+    "nodeId": "claude-trigger",
+    "label": "Claude",
+    "vendorName": "nest-cast",
+    "productName": "Claude Trigger",
+    "_vendorIdDoc": "0xFFF1 / 0x8000 are the Matter test vendor/product IDs for uncertified devices.",
+    "vendorId": 65521,
+    "productId": 32768,
+    "serialNumber": "nest-cast-0001",
+    "port": 5540,
+    "passcode": 20202021,
+    "discriminator": 3840
+  },
+  "storagePath": ".matter-storage",
+  "logPath": "events.jsonl",
+  "_collectLevelMsDoc": "How long after ON to wait for a brightness that came with the same command.",
+  "collectLevelMs": 300,
+  "_resetDoc": "Switch back OFF this long after ON, so the next routine fires again. Must exceed collectLevelMs.",
+  "resetToOffAfterMs": 1500,
+  "_onTriggerDoc": "Command run on ON without a brightness. Empty array = log only.",
+  "onTrigger": ["uv", "run", "--project", "..", "nest-cast", "--name", "客廳", "say", "收到"],
+  "_onTriggerWithLevelDoc": "Command run on ON with a brightness; {percent} is 0-100.",
+  "onTriggerWithLevel": ["uv", "run", "--project", "..", "nest-cast", "--name", "客廳", "say", "收到，參數 {percent}"]
+}

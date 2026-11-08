@@ -5,7 +5,8 @@
 # Friendly name ("fn" in mDNS, set in the Google Home app) used when --name/--host are omitted.
 # Leave empty to use the only device found, or error if several are found.
 default_name = ""
-discovery_timeout_sec = 5
+# Upper bound; lookups by name return as soon as the device answers.
+discovery_timeout_sec = 10
 connect_timeout_sec = 10
 # Port of the speaker's unauthenticated local setup API (eureka_info).
 setup_http_port = 8008

@@ -1,51 +1,58 @@
-# matter-trigger：用語音觸發這台 Mac
+# matter-trigger: Trigger the Mac by voice
 
-在 Mac 上模擬一盞 Matter 可調光燈，加進 Google Home 之後，就能用「Hey Google」觸發 Mac 上的程式。
-亮度 0–100 可以當成參數，一句話就能選擇不同的動作。
+Emulates a dimmable Matter light on the Mac. Once it is added to Google Home, "Hey Google" can
+trigger programs on the Mac, and the brightness (0–100) works as a parameter, so one sentence
+can pick between many actions.
 
 ```
-「Hey Google，把機器人調到 30%」
-  → Google Assistant（雲端辨識）→ Google 的 Matter 控制端
-  → 區網 Matter：levelControl.moveToLevelWithOnOff level=76
-  → trigger.mjs：換算成 30%，執行 config.onTriggerWithLevel
-  → nest-cast 讓喇叭說「收到，參數 30」→ 1.5 秒後自動關燈，等下一次觸發
+"Hey Google, set the robot to 30%"
+  → Google Assistant (cloud recognition) → Google's Matter controller
+  → Matter over the LAN: levelControl.moveToLevelWithOnOff level=76
+  → trigger.mjs: converts to 30%, runs config.onTriggerWithLevel
+  → nest-cast makes the speaker say "收到，參數 30" (got it, parameter 30)
+  → switches itself off after 1.5 s, ready for the next trigger
 ```
 
-## 執行
+## Running
 
 ```bash
 npm install
-node trigger.mjs        # 要在 Claude Code 沙箱外執行：Matter 需要 inbound mDNS／UDP
+node trigger.mjs        # run outside the Claude Code sandbox: Matter needs inbound mDNS/UDP
 ```
 
-第一次執行會印出 QR code 和手動配對碼，用 Google Home App 的「新增 → Matter 支援裝置」配對。
-所有設定都在 [config.json](config.json)；事件會逐行寫進 `events.jsonl`。
+The first run prints a QR code and a manual pairing code; pair it with Google Home's
+"Add → Matter-enabled device". All settings are in [config.json](config.json); events are appended
+to `events.jsonl`, one per line.
 
-## 實驗結果（2026-11-08，Google Home Mini 第一代當 hub）
+## Results (2026-11-08, first-generation Google Home Mini as the hub)
 
-| 問題 | 結果 |
+| Question | Result |
 |---|---|
-| App 按鈕能觸發嗎？ | 可以。命令到達後 22ms 內記錄完成 |
-| 語音能觸發嗎？ | **可以，但要先註冊**（見下方） |
-| 能帶參數嗎？ | 可以。「調到 30%」會收到 `moveToLevelWithOnOff level=76`，換算後是 30 |
-| 觸發到喇叭回應 | 約 4 秒（主要花在 nest-cast 啟動與 TTS） |
-| 斷網還能用嗎？ | 沒測。語音辨識在雲端，預期不行 |
-| 從說完話到命令抵達 | 沒測 |
+| Does the app button trigger it? | Yes. Logged within 22 ms of the command arriving |
+| Does voice trigger it? | **Yes, after registering the device** (see below) |
+| Can it carry a parameter? | Yes. "Set to 30%" arrives as `moveToLevelWithOnOff level=76`, i.e. 30 |
+| Trigger to spoken reply | About 4 s (mostly nest-cast start-up and TTS) |
+| Does it work offline? | Not tested. Recognition is in the cloud, so probably not |
+| End of speech to command arriving | Not measured |
 
-### 踩過的坑
+### Pitfalls
 
-- **沒註冊的測試裝置，語音會被擋**：App 按得動，但 Assistant 回「this device didn't setup yet」。
-  到 [Google Home Developer Console](https://console.home.google.com/) 建立專案，新增 Matter integration
-  （VID `0xFFF1`、PID `0x8000`，跟 config.json 一致），再重新配對，語音就能用了。
-- **在 App 裡移除裝置，Google 不一定會通知裝置**：裝置會以為自己還在配對中，掃 QR code 會失敗。
-  解法是停掉程式，刪除 `.matter-storage/`，再重新啟動。
-- **「打開」不帶亮度**：單純「打開」只會送 `onOff.on`；「調到 N%」則是一個命令同時開燈加設定亮度。
-  所以程式在收到 ON 後等 `collectLevelMs`，只有跟 ON 一起到的亮度才算參數，避免把上一次的亮度誤當成這次的。
-- **觸發詞**：例行程序用「叫 Claude」時沒有反應（推測「叫」被當成打電話）。直接說「打開＋裝置名」最穩。
-- Google 會加兩組配對：其中 fabric #2 的管理者廠商 ID 是 0x6006（Google），App 和語音的命令都從這組進來，
-  所以 Mac 這邊分不出是語音還是 App 觸發的。
+- **Unregistered test devices are blocked for voice**: the app can control it, but Assistant
+  answers "this device didn't setup yet". Create a project in the
+  [Google Home Developer Console](https://console.home.google.com/), add a Matter integration
+  (VID `0xFFF1`, PID `0x8000`, matching config.json), re-pair, and voice works.
+- **Removing the device in the app may not tell the device**: it still thinks it is paired, so
+  scanning the QR code fails. Stop the program, delete `.matter-storage/`, and start it again.
+- **"Turn on" carries no brightness**: a plain "turn on" sends only `onOff.on`, while "set to N%"
+  is a single command that turns on and sets the level. So after an ON the program waits
+  `collectLevelMs` and only counts a level that arrived with it, never a stale one.
+- **Trigger phrase**: a routine started by "叫 Claude" ("call Claude") never fired, presumably
+  taken as a phone call. "Turn on" + the device name is the most reliable.
+- Google adds two fabrics. Fabric #2's admin vendor ID is 0x6006 (Google), and both app and voice
+  commands arrive through it, so the Mac cannot tell which one triggered it.
 
-## 限制
+## Limitations
 
-- 只能傳數字（0–100），不能傳文字。文字改走 Google Tasks，見 [../tasks-probe/](../tasks-probe/README.md)。
-- 在整體流程裡的角色：門鈴響了，`watch_tasks.py` 就改成每秒檢查 Tasks。見 [../README.md](../README.md)。
+- Numbers only (0–100), no text. Text goes through Google Tasks; see [../tasks-probe/](../tasks-probe/README.md).
+- Role in the overall flow: when the doorbell rings, `watch_tasks.py` switches to polling Tasks
+  every second. See [../README.md](../README.md).

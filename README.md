@@ -1,110 +1,127 @@
-# nest-cast：用舊的 Google Home 喇叭指揮 Claude
+# nest-cast: Put Claude to work from an old Google Home speaker
 
-對客廳的 Google Home Mini 說一句話，Claude 就在 Mac 上把事情做完，再用同一顆喇叭唸結果給你聽，
-最後自動清掉這次的紀錄。
+Say one sentence to the Google Home Mini in the living room. Claude does the job on the Mac,
+reads the result back through the same speaker, then cleans up after itself.
 
 ```
-「Hey Google，提醒我今天請機器人 <要做的事>」
-  │  Google Assistant 把句子寫進 Google Tasks（標題：機器人<要做的事>）
+"Hey Google, remind me today to have the robot <do something>"
+  │  Google Assistant writes the sentence into Google Tasks (title: 機器人<do something>)
   │
-  │  （可選）「Hey Google，打開機器人」── 門鈴：Matter 虛擬燈，讓 Mac 立刻改成每秒檢查
+  │  (optional) "Hey Google, turn on the robot" ── doorbell: a Matter virtual light that
+  │                                                 makes the Mac poll every second
   ▼
-tasks-probe/watch_tasks.py   輪詢 Google Tasks，挑出「機器人」開頭的新任務
+tasks-probe/watch_tasks.py   polls Google Tasks for new tasks starting with 機器人 ("robot")
   ▼
-Claude session               依內容完成工作；對外動作（發訊息、刪東西、付款）先在電腦上確認
+Claude session               does the work; outward actions (sending messages, deleting,
+                             paying) are confirmed on the computer first
   ▼
-nest-cast say                在喇叭上唸結果（長文自動分段）
+nest-cast say                speaks the result on the speaker (long text is split into chunks)
   ▼
-tasks-probe/finish_task.py   唸完才刪掉任務；只刪「機器人」開頭的任務
+tasks-probe/finish_task.py   deletes the task only after the reply was spoken,
+                             and only if its title starts with 機器人
 ```
 
-## 實測（2026-11-08，Google Home Mini 第一代）
+The command prefix is 機器人 ("robot") because the speaker runs Assistant in Traditional
+Chinese, and a Chinese word is recognized far more reliably than "Claude".
 
-| 指令（Tasks 裡的標題） | 結果 | 時間 |
+## Results (2026-11-08, first-generation Google Home Mini)
+
+| Command as it landed in Tasks | What happened | Time |
 |---|---|---|
-| 機器人要幫我查一個AI新聞 | 搜尋後唸出一則新聞 | 任務建立到唸完約 70 秒，大多花在搜尋 |
-| 機器人幫我撥聞到snake說 | 原意是「發文到 Slack 說一則笑話」：先在喇叭說聽不懂、在電腦上確認後私訊到自己的 Slack，唸完後刪除任務 | 確認後約 34 秒 |
+| 機器人要幫我查一個AI新聞 ("robot, look up an AI news story for me") | Searched the web and read one story aloud | ~70 s from task created to reply finished, mostly spent searching |
+| 機器人幫我撥聞到snake說 (garbled) | Meant "post a joke to Slack". Said on the speaker that it didn't understand, confirmed on the computer, DMed the joke to my own Slack, read it aloud, deleted the task | ~34 s after confirming |
 
-- 任務建立後，最慢在一個輪詢間隔（平常 5 秒、門鈴響後 1 秒）內就會讀到。
-- 最弱的一環是 **Assistant 的語音辨識**：「發文到 Slack」被寫成「撥聞到 snake」。
-  聽不懂的指令不要猜，先問、任務先留著。
-- Assistant 會改寫句子（拿掉「提醒我請」），所以用「機器人」當開頭，方便跟自己的待辦分開。
+- A new task is picked up within one poll interval: 5 s normally, 1 s after the doorbell rings.
+- The weakest link is **Assistant's speech recognition**: "發文到 Slack" (post to Slack) became
+  "撥聞到 snake". Don't guess at commands that make no sense; ask, and keep the task until done.
+- Assistant rewrites the sentence (it drops "remind me to have"), so a fixed prefix is what
+  separates commands from my own to-dos.
 
-## 怎麼跑起來
+## Running it
 
-1. **喇叭**：`uv sync`，確認 `uv run nest-cast discover` 找得到喇叭。
-2. **Google Tasks**：個人帳號的 `gws` 要有 `https://www.googleapis.com/auth/tasks` scope，
-   而且那個 GCP 專案要啟用 Tasks API。細節見 [tasks-probe/](tasks-probe/README.md)。
-3. **門鈴（可選）**：`cd matter-trigger && npm install && node trigger.mjs`，用 Google Home App 配對。
-   語音要能觸發，測試裝置必須先在 Google Home Developer Console 註冊。見 [matter-trigger/](matter-trigger/README.md)。
-4. **處理者**：在 Claude Code session 裡監看 `watch_tasks.py` 的輸出，收到任務就做事、`say`、`finish_task.py`。
+1. **Speaker**: `uv sync`, then check that `uv run nest-cast discover` finds the speaker.
+2. **Google Tasks**: the personal `gws` account needs the `https://www.googleapis.com/auth/tasks`
+   scope, and its GCP project must have the Tasks API enabled. See [tasks-probe/](tasks-probe/README.md).
+3. **Doorbell (optional)**: `cd matter-trigger && npm install && node trigger.mjs`, then pair it in
+   the Google Home app. For voice control to work, the test device must first be registered in the
+   Google Home Developer Console. See [matter-trigger/](matter-trigger/README.md).
+4. **Handler**: in a Claude Code session, watch the output of `watch_tasks.py`. For each task:
+   do the work, `say` the result, run `finish_task.py`.
 
-需要 inbound 連線的部分（Matter、`play-file`）要在 Claude Code 沙箱外執行。
+Anything that needs inbound connections (Matter, `play-file`) must run outside the Claude Code sandbox.
 
-## 目前的限制
+## Current limitations
 
-- **要靠 Claude session 開著。** 監看是 session 裡的背景工作，關掉就沒有人接手，
-  提醒會留在 Tasks 裡。想常駐要改成服務（例如收到任務就啟動 `claude -p`），
-  但那樣就沒有人能即時確認對外的動作，需要另外設計。
-- **門鈴只能傳數字**（開關、0–100 的亮度），文字一定要走 Tasks。
-- TTS 用的是 Google Translate 的非正式端點，隨時可能失效；換掉 `config.toml` 的 `[tts].url_template` 即可。
+- **A Claude session has to stay open.** The watcher runs as a background job inside the session;
+  close it and nobody picks up the reminders, which stay in Tasks. Running unattended would mean
+  a service (e.g. launch `claude -p` per task), but then nobody is there to confirm outward
+  actions, which needs its own design.
+- **The doorbell only carries numbers** (on/off, brightness 0–100). Text has to go through Tasks.
+- TTS uses an unofficial Google Translate endpoint that may break at any time; swap
+  `[tts].url_template` in `config.toml`.
 
-## 組成
+## Pieces
 
-| 資料夾／指令 | 角色 |
+| Folder / command | Role |
 |---|---|
-| [`nest-cast`](src/nest_cast/) CLI | 喇叭的「嘴巴」：探索、狀態、TTS、播放、音量 |
-| [tasks-probe/](tasks-probe/README.md) | 文字通道：監看 Google Tasks、處理完刪除 |
-| [matter-trigger/](matter-trigger/README.md) | 門鈴：Matter 虛擬燈，把語音變成即時觸發與 0–100 參數 |
+| [`nest-cast`](src/nest_cast/) CLI | The speaker's "mouth": discovery, status, TTS, playback, volume |
+| [tasks-probe/](tasks-probe/README.md) | The text channel: watch Google Tasks, delete when handled |
+| [matter-trigger/](matter-trigger/README.md) | The doorbell: a Matter virtual light turning voice into an instant trigger with a 0–100 parameter |
 
 ### nest-cast CLI
 
 ```bash
-uv run nest-cast discover                    # 列出區網上的 Cast 裝置
-uv run nest-cast --name 客廳 status          # 音量、目前的 app
-uv run nest-cast --name 客廳 info            # 喇叭本機設定 API 的資訊（版本、Wi-Fi、地區）
-uv run nest-cast --name 客廳 say "晚餐好了" --volume 0.3
+uv run nest-cast discover                    # list Cast devices on the LAN
+uv run nest-cast --name 客廳 status          # volume, current app (客廳 = the speaker's name)
+uv run nest-cast --name 客廳 info            # speaker's local setup API: build, Wi-Fi, locale
+uv run nest-cast --name 客廳 say "Dinner is ready" --volume 0.3
 uv run nest-cast --name 客廳 play https://example.com/a.mp3
 uv run nest-cast --name 客廳 play-file ./chime.m4a
 uv run nest-cast --name 客廳 volume 0.4
 uv run nest-cast --name 客廳 stop
-uv run nest-cast --name 客廳 trace           # 印出狀態事件，除錯用
+uv run nest-cast --name 客廳 trace           # print status events, for debugging
 ```
 
-- `--name` 找到裝置就繼續，不用等滿逾時；`--host <ip>` 直接連線，跳過探索。
-- `--volume` 只在這次播放有效，播完改回原本的音量。
-- 可調的值都在 [config.toml](config.toml)：TTS 語言與分段長度、逾時、port、副檔名對應。
+- `--name` returns as soon as the device answers instead of waiting out the timeout;
+  `--host <ip>` connects directly and skips discovery.
+- `--volume` applies to this playback only; the original volume is restored afterwards.
+- Every tunable lives in [config.toml](config.toml): TTS language and chunk size, timeouts,
+  ports, file-extension MIME types.
 
-| 檔案 | 內容 |
+| File | Contents |
 |---|---|
-| [src/nest_cast/config.py](src/nest_cast/config.py) | 讀 `config.toml` |
-| [src/nest_cast/device.py](src/nest_cast/device.py) | 探索、連線、本機設定 API |
-| [src/nest_cast/media.py](src/nest_cast/media.py) | 播 URL、TTS（含長文分段）、本機檔案、狀態追蹤 |
-| [src/nest_cast/cli.py](src/nest_cast/cli.py) | 指令列 |
+| [src/nest_cast/config.py](src/nest_cast/config.py) | Loads `config.toml` |
+| [src/nest_cast/device.py](src/nest_cast/device.py) | Discovery, connection, local setup API |
+| [src/nest_cast/media.py](src/nest_cast/media.py) | URL playback, TTS (with chunking), local files, status tracing |
+| [src/nest_cast/cli.py](src/nest_cast/cli.py) | Command line |
 
-## 背景：為什麼不是 ADB
+## Background: why not ADB
 
-起因是用 agent 透過 ADB 改 Google TV 的 skill 很紅，想知道舊的 Nest 能不能比照辦理。
+This started from agent skills that tweak Google TV over ADB: could the same be done to an old Nest?
 
-不行：Nest 喇叭跑的是 Cast OS（Nest Hub 是 Fuchsia），沒有 ADB 也沒有 shell，
-精簡系統、刪 app、換 launcher 這些都做不到。能用的只有區網上開放的部分，不需要 Google 帳號：
+No. Nest speakers run Cast OS (the Nest Hub runs Fuchsia), with no ADB and no shell, so debloating,
+removing apps or swapping launchers is out. What remains is what the LAN exposes, with no Google
+account needed:
 
-| 能力 | 做法 |
+| Capability | How |
 |---|---|
-| 找到裝置 | mDNS `_googlecast._tcp` |
-| 讀裝置資訊 | 本機設定 API `http://<ip>:8008/setup/eureka_info`，不需認證 |
-| 狀態、音量、停止、播放 URL、TTS | Cast v2（TCP 8009），喇叭自己去抓音訊 |
-| 改系統設定、聽麥克風 | 做不到。所以「耳朵」要繞道 Google Tasks 和 Matter |
+| Find the device | mDNS `_googlecast._tcp` |
+| Read device info | Local setup API `http://<ip>:8008/setup/eureka_info`, no auth |
+| Status, volume, stop, play a URL, TTS | Cast v2 (TCP 8009); the speaker fetches the audio itself |
+| Change system settings, use the microphone | Not possible. So the "ears" go through Google Tasks and Matter instead |
 
-## 踩過的坑
+## Pitfalls
 
-- **沙箱**：Claude Code 沙箱擋 inbound，`play-file` 會 `LOAD FAILED`，Matter 也配對不了。
-- **VPN**：`play-file` 給喇叭的網址，要用「通往喇叭那條路由」的本機 IP，不能用 VPN 的位址。
-- **mDNS 很慢**：喇叭忙著回應語音時，可能 5 秒內都不回 mDNS。所以改成依名稱查詢，找到就繼續，最多等 10 秒。
-- 門鈴與 Tasks 各自的坑，寫在各自的 README。
+- **Sandbox**: the Claude Code sandbox blocks inbound connections, so `play-file` fails with
+  `LOAD FAILED` and Matter cannot be paired.
+- **VPN**: the URL handed to the speaker by `play-file` must use the local IP on the route to the
+  speaker, not the VPN address.
+- **Slow mDNS**: while the speaker is busy answering a voice command it may not answer mDNS for
+  5 s. Lookups by name return as soon as the device answers and give up after 10 s.
+- The doorbell's and Tasks' own pitfalls are in their READMEs.
 
-## 想過但還沒做
+## Ideas not built yet
 
-- Claude Code／ctd 任務完成或等待權限時，用語音通知
-- Unity build、GitLab pipeline 結果廣播
-- 會議前的行事曆語音提醒、語音版晨報
+- Spoken notice when a Claude Code / ctd job finishes or is waiting for permission
+- Announce Unity build and GitLab pipeline results
+- Spoken calendar reminders before meetings, a spoken morning brief

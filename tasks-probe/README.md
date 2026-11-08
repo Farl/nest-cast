@@ -1,30 +1,37 @@
-# tasks-probe：用 Google Tasks 把語音指令傳成文字
+# tasks-probe: Voice commands as text, through Google Tasks
 
-Google Assistant 的「提醒我…」會寫進 Google Tasks，所以這是把**任意文字**從客廳傳到 Mac 的通道。
+Google Assistant saves "remind me to…" into Google Tasks, which makes it a channel for carrying
+**free text** from the living room to the Mac.
 
-| 檔案 | 作用 |
+| File | Purpose |
 |---|---|
-| [watch_tasks.py](watch_tasks.py) | 輪詢所有清單裡 `updatedMin`（啟動時間）之後的任務，每筆新任務印一行 JSON（含 `list_id`、`id`） |
-| [finish_task.py](finish_task.py) | 處理完後刪除任務；標題不是「機器人」開頭就拒絕，不會誤刪自己的待辦 |
+| [watch_tasks.py](watch_tasks.py) | Polls every list for tasks updated after start-up (`updatedMin`) and prints one JSON line per new task, including `list_id` and `id` |
+| [finish_task.py](finish_task.py) | Deletes a task once handled; refuses any task whose title does not start with 機器人, so it can never delete one of my own to-dos |
 
 ```bash
-export GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws-personal   # 綁 Google Home 的那個帳號
+export GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws-personal   # the account Google Home uses
 python3 watch_tasks.py --poll 5 --fast-poll 1 --fast-for 90
 python3 finish_task.py <list_id> <task_id>
 ```
 
-`watch_tasks.py` 也會看 [../matter-trigger/](../matter-trigger/README.md) 的 `events.jsonl`：
-門鈴一響，就改成每 `--fast-poll` 秒輪詢，持續 `--fast-for` 秒。
+`watch_tasks.py` also watches `events.jsonl` from [../matter-trigger/](../matter-trigger/README.md):
+when the doorbell rings it polls every `--fast-poll` seconds for `--fast-for` seconds.
 
-## 設定
+## Setup
 
-- `gws` 的個人帳號要有 `https://www.googleapis.com/auth/tasks` scope（要刪除，唯讀不夠），
-  而且 `gws` 用的那個 GCP 專案要啟用 Tasks API。
-- 重新授權後如果還是回報 scope 不足，把 `token_cache.json` 移開，讓 gws 重新拿 token。
+- The personal `gws` account needs the `https://www.googleapis.com/auth/tasks` scope (deleting
+  needs write access; read-only is not enough), and the GCP project `gws` uses must have the
+  Tasks API enabled.
+- If it still reports insufficient scopes after re-authorizing, move `token_cache.json` aside so
+  `gws` fetches a fresh token.
 
-## 觀察（2026-11-08）
+## Observations (2026-11-08)
 
-- 任務會進 **TODO** 清單（不是另外一個「提醒」清單），到期日只有日期，沒有時間。
-- Assistant 會改寫句子：「提醒我請機器人查明天天氣」變成「機器人查明天天氣」。
-- 從說完到 Tasks 出現，要等 Google 處理，體感偏慢；Mac 這邊在任務建立後 0.2～2 秒內讀到。
-- 語音辨識可能錯得離譜（「發文到 Slack」被寫成「撥聞到 snake」），看不懂就先問、不要猜。
+- Tasks land in the **TODO** list (not a separate "Reminders" list). The due field has a date only,
+  no time.
+- Assistant rewrites the sentence: "提醒我請機器人查明天天氣" (remind me to have the robot check
+  tomorrow's weather) becomes "機器人查明天天氣" (robot check tomorrow's weather).
+- Google takes a noticeable while between the end of speech and the task appearing; the Mac
+  reads it 0.2–2 s after it is created.
+- Recognition can be badly wrong ("發文到 Slack" became "撥聞到 snake"). If a command makes no
+  sense, ask instead of guessing.

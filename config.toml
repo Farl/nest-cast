@@ -1,0 +1,38 @@
+# nest-cast settings. Code reads every tunable from here; nothing is hardcoded.
+# Override the file path with the NEST_CAST_CONFIG environment variable.
+
+[device]
+# Friendly name ("fn" in mDNS, set in the Google Home app) used when --name/--host are omitted.
+# Leave empty to use the only device found, or error if several are found.
+default_name = ""
+discovery_timeout_sec = 5
+connect_timeout_sec = 10
+# Port of the speaker's unauthenticated local setup API (eureka_info).
+setup_http_port = 8008
+setup_http_timeout_sec = 5
+
+[tts]
+# The speaker fetches this URL itself, so nothing has to be served from this machine.
+# {lang} and {text} are filled in (text is URL-encoded).
+url_template = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl={lang}&q={text}"
+lang = "zh-TW"
+mime = "audio/mpeg"
+
+[playback]
+# How long to wait for a clip to start and finish before giving up.
+wait_limit_sec = 60
+poll_interval_sec = 0.5
+# Seconds `trace` keeps listening to status events.
+trace_sec = 15
+
+[serve]
+# play-file serves a local file over HTTP so the speaker can fetch it.
+# The speaker must be able to open an inbound connection to this port.
+port = 8765
+
+[serve.mime_by_ext]
+".m4a" = "audio/mp4"
+".mp3" = "audio/mpeg"
+".wav" = "audio/wav"
+".ogg" = "audio/ogg"
+".flac" = "audio/flac"

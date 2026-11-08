@@ -1,0 +1,14 @@
+[project]
+name = "nest-cast"
+version = "0.1.0"
+description = "Control Google Nest / Home speakers on the LAN over the Cast protocol"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["pychromecast>=14"]
+
+[project.scripts]
+nest-cast = "nest_cast.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

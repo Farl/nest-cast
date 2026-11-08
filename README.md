@@ -1,70 +1,110 @@
-# nest-cast
+# nest-cast：用舊的 Google Home 喇叭指揮 Claude
 
-用 Cast 協定在區網內控制 Google Nest／Google Home 喇叭的小工具，也是一份實驗紀錄。
+對客廳的 Google Home Mini 說一句話，Claude 就在 Mac 上把事情做完，再用同一顆喇叭唸結果給你聽，
+最後自動清掉這次的紀錄。
 
-起因：用 agent 透過 ADB 改 Google TV 的 skill 很紅，想知道舊的 Nest 能不能比照辦理。
+```
+「Hey Google，提醒我今天請機器人 <要做的事>」
+  │  Google Assistant 把句子寫進 Google Tasks（標題：機器人<要做的事>）
+  │
+  │  （可選）「Hey Google，打開機器人」── 門鈴：Matter 虛擬燈，讓 Mac 立刻改成每秒檢查
+  ▼
+tasks-probe/watch_tasks.py   輪詢 Google Tasks，挑出「機器人」開頭的新任務
+  ▼
+Claude session               依內容完成工作；對外動作（發訊息、刪東西、付款）先在電腦上確認
+  ▼
+nest-cast say                在喇叭上唸結果（長文自動分段）
+  ▼
+tasks-probe/finish_task.py   唸完才刪掉任務；只刪「機器人」開頭的任務
+```
 
-## 結論
+## 實測（2026-11-08，Google Home Mini 第一代）
 
-Nest 喇叭跑的是 **Cast OS**（Nest Hub 是 Fuchsia），**沒有 ADB、沒有 shell**。
-所以 Google TV 那種「精簡系統、刪 app、換 launcher」做不到。
-
-能做的是 Cast 協定開放的部分，不需要 Google 帳號：
-
-| 能力 | 做法 | 實測 |
+| 指令（Tasks 裡的標題） | 結果 | 時間 |
 |---|---|---|
-| 找到裝置 | mDNS `_googlecast._tcp` | 成功 |
-| 讀裝置資訊（版本、Wi-Fi、地區） | 本機設定 API `http://<ip>:8008/setup/eureka_info`，不需認證 | 成功 |
-| 讀狀態、調音量、停止 | Cast v2（TCP 8009） | 成功 |
-| 播放網路音訊、TTS 說話 | Default Media Receiver 播放 URL，由喇叭自己去抓 | 成功（BUFFERING → PLAYING → FINISHED） |
-| 播放這台電腦上的檔案 | 在本機開 HTTP server 讓喇叭來抓 | 成功（在沙箱外執行） |
-| 改系統設定、聽麥克風 | — | 做不到，沒有公開介面 |
+| 機器人要幫我查一個AI新聞 | 搜尋後唸出一則新聞 | 任務建立到唸完約 70 秒，大多花在搜尋 |
+| 機器人幫我撥聞到snake說 | 原意是「發文到 Slack 說一則笑話」：先在喇叭說聽不懂、在電腦上確認後私訊到自己的 Slack，唸完後刪除任務 | 確認後約 34 秒 |
 
-實驗裝置：Google Home Mini（第一代），Cast firmware 3.78.540761。
+- 任務建立後，最慢在一個輪詢間隔（平常 5 秒、門鈴響後 1 秒）內就會讀到。
+- 最弱的一環是 **Assistant 的語音辨識**：「發文到 Slack」被寫成「撥聞到 snake」。
+  聽不懂的指令不要猜，先問、任務先留著。
+- Assistant 會改寫句子（拿掉「提醒我請」），所以用「機器人」當開頭，方便跟自己的待辦分開。
 
-## 使用
+## 怎麼跑起來
 
-需要 [uv](https://docs.astral.sh/uv/) 與 Python 3.11 以上。
+1. **喇叭**：`uv sync`，確認 `uv run nest-cast discover` 找得到喇叭。
+2. **Google Tasks**：個人帳號的 `gws` 要有 `https://www.googleapis.com/auth/tasks` scope，
+   而且那個 GCP 專案要啟用 Tasks API。細節見 [tasks-probe/](tasks-probe/README.md)。
+3. **門鈴（可選）**：`cd matter-trigger && npm install && node trigger.mjs`，用 Google Home App 配對。
+   語音要能觸發，測試裝置必須先在 Google Home Developer Console 註冊。見 [matter-trigger/](matter-trigger/README.md)。
+4. **處理者**：在 Claude Code session 裡監看 `watch_tasks.py` 的輸出，收到任務就做事、`say`、`finish_task.py`。
+
+需要 inbound 連線的部分（Matter、`play-file`）要在 Claude Code 沙箱外執行。
+
+## 目前的限制
+
+- **要靠 Claude session 開著。** 監看是 session 裡的背景工作，關掉就沒有人接手，
+  提醒會留在 Tasks 裡。想常駐要改成服務（例如收到任務就啟動 `claude -p`），
+  但那樣就沒有人能即時確認對外的動作，需要另外設計。
+- **門鈴只能傳數字**（開關、0–100 的亮度），文字一定要走 Tasks。
+- TTS 用的是 Google Translate 的非正式端點，隨時可能失效；換掉 `config.toml` 的 `[tts].url_template` 即可。
+
+## 組成
+
+| 資料夾／指令 | 角色 |
+|---|---|
+| [`nest-cast`](src/nest_cast/) CLI | 喇叭的「嘴巴」：探索、狀態、TTS、播放、音量 |
+| [tasks-probe/](tasks-probe/README.md) | 文字通道：監看 Google Tasks、處理完刪除 |
+| [matter-trigger/](matter-trigger/README.md) | 門鈴：Matter 虛擬燈，把語音變成即時觸發與 0–100 參數 |
+
+### nest-cast CLI
 
 ```bash
-uv sync
 uv run nest-cast discover                    # 列出區網上的 Cast 裝置
 uv run nest-cast --name 客廳 status          # 音量、目前的 app
-uv run nest-cast --name 客廳 info            # 本機設定 API 的完整資訊
+uv run nest-cast --name 客廳 info            # 喇叭本機設定 API 的資訊（版本、Wi-Fi、地區）
 uv run nest-cast --name 客廳 say "晚餐好了" --volume 0.3
 uv run nest-cast --name 客廳 play https://example.com/a.mp3
 uv run nest-cast --name 客廳 play-file ./chime.m4a
 uv run nest-cast --name 客廳 volume 0.4
+uv run nest-cast --name 客廳 stop
 uv run nest-cast --name 客廳 trace           # 印出狀態事件，除錯用
 ```
 
-- `--host <ip>` 可以跳過 mDNS 探索，直接連線。
-- `--volume` 只在這次播放有效，播完會改回原本的音量。
-- 所有可調的值（TTS 語言、逾時、port、副檔名對應）都在 [config.toml](config.toml)。
-  `[device].default_name` 填好之後就不用每次加 `--name`。
-
-## 程式結構
+- `--name` 找到裝置就繼續，不用等滿逾時；`--host <ip>` 直接連線，跳過探索。
+- `--volume` 只在這次播放有效，播完改回原本的音量。
+- 可調的值都在 [config.toml](config.toml)：TTS 語言與分段長度、逾時、port、副檔名對應。
 
 | 檔案 | 內容 |
 |---|---|
 | [src/nest_cast/config.py](src/nest_cast/config.py) | 讀 `config.toml` |
 | [src/nest_cast/device.py](src/nest_cast/device.py) | 探索、連線、本機設定 API |
-| [src/nest_cast/media.py](src/nest_cast/media.py) | 播 URL、TTS、本機檔案、狀態追蹤 |
+| [src/nest_cast/media.py](src/nest_cast/media.py) | 播 URL、TTS（含長文分段）、本機檔案、狀態追蹤 |
 | [src/nest_cast/cli.py](src/nest_cast/cli.py) | 指令列 |
 
-## 已知限制
+## 背景：為什麼不是 ADB
 
-- **`play-file` 需要喇叭能主動連進這台電腦。** 在 Claude Code 的沙箱裡跑時，
-  inbound 連線會被擋，喇叭會回報 `LOAD FAILED`，沙箱的代理也會回 404。
-  請在一般終端機執行，並確認防火牆放行 `[serve].port`。
-- 開著 VPN 時，提供給喇叭的網址會用「通往喇叭那條路由」的本機 IP，
-  不會誤用 VPN 的位址（踩過這個坑：拿到 172.18.x，喇叭連不到）。
-- TTS 用的是 Google Translate 的非正式端點，隨時可能失效；換掉 `[tts].url_template` 即可。
-- 只能「說」不能「聽」：Cast 協定拿不到麥克風。語音觸發要繞道 Matter，見 [matter-trigger/](matter-trigger/README.md)。
+起因是用 agent 透過 ADB 改 Google TV 的 skill 很紅，想知道舊的 Nest 能不能比照辦理。
 
-## 想過但還沒做的用法
+不行：Nest 喇叭跑的是 Cast OS（Nest Hub 是 Fuchsia），沒有 ADB 也沒有 shell，
+精簡系統、刪 app、換 launcher 這些都做不到。能用的只有區網上開放的部分，不需要 Google 帳號：
+
+| 能力 | 做法 |
+|---|---|
+| 找到裝置 | mDNS `_googlecast._tcp` |
+| 讀裝置資訊 | 本機設定 API `http://<ip>:8008/setup/eureka_info`，不需認證 |
+| 狀態、音量、停止、播放 URL、TTS | Cast v2（TCP 8009），喇叭自己去抓音訊 |
+| 改系統設定、聽麥克風 | 做不到。所以「耳朵」要繞道 Google Tasks 和 Matter |
+
+## 踩過的坑
+
+- **沙箱**：Claude Code 沙箱擋 inbound，`play-file` 會 `LOAD FAILED`，Matter 也配對不了。
+- **VPN**：`play-file` 給喇叭的網址，要用「通往喇叭那條路由」的本機 IP，不能用 VPN 的位址。
+- **mDNS 很慢**：喇叭忙著回應語音時，可能 5 秒內都不回 mDNS。所以改成依名稱查詢，找到就繼續，最多等 10 秒。
+- 門鈴與 Tasks 各自的坑，寫在各自的 README。
+
+## 想過但還沒做
 
 - Claude Code／ctd 任務完成或等待權限時，用語音通知
 - Unity build、GitLab pipeline 結果廣播
 - 會議前的行事曆語音提醒、語音版晨報
-- 依時間或天氣播放的房間環境音、桌遊主持人、AI 生成音樂電台

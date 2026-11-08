@@ -47,16 +47,5 @@ node trigger.mjs        # 要在 Claude Code 沙箱外執行：Matter 需要 inb
 
 ## 限制
 
-- 只能傳數字（0–100），不能傳文字。文字改走 Google Tasks，見下一節。
-
-## 後續：用 Google Tasks 傳文字（[../tasks-probe/](../tasks-probe/watch_tasks.py)）
-
-- 「Hey Google，提醒我請機器人查一個 AI 新聞」會在 Google Tasks 的 TODO 清單建立「機器人要幫我查一個AI新聞」。
-  Assistant 會改寫句子（拿掉「提醒我請」），到期日只有日期。
-- `watch_tasks.py` 用 `gws` 輪詢 `updatedMin` 之後的任務；看到門鈴的 TRIGGER 就改成每秒輪詢一段時間。
-- 2026-11-08 實測：任務建立後 0.2 秒讀到；由 Claude session 查新聞並用 `nest-cast say` 回覆，整個來回約 70 秒，
-  最花時間的是處理本身。門鈴加速還沒實測到。
-- 處理流程：讀到任務 → 做事 → `nest-cast say` 回覆成功 → `finish_task.py` 刪掉該任務，不留在 Tasks 裡。
-  回覆失敗就不刪，留著當作「沒做完」的紀錄。`finish_task.py` 只刪標題以「機器人」開頭的任務，其他一律拒絕。
-- 需要個人帳號的 `tasks` scope（要能刪除，唯讀不夠），以及該 GCP 專案啟用 Tasks API。
-  重新授權後若仍回報 scope 不足，把 `token_cache.json` 移開，讓 gws 重新拿 token。
+- 只能傳數字（0–100），不能傳文字。文字改走 Google Tasks，見 [../tasks-probe/](../tasks-probe/README.md)。
+- 在整體流程裡的角色：門鈴響了，`watch_tasks.py` 就改成每秒檢查 Tasks。見 [../README.md](../README.md)。

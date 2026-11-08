@@ -56,4 +56,7 @@ node trigger.mjs        # 要在 Claude Code 沙箱外執行：Matter 需要 inb
 - `watch_tasks.py` 用 `gws` 輪詢 `updatedMin` 之後的任務；看到門鈴的 TRIGGER 就改成每秒輪詢一段時間。
 - 2026-11-08 實測：任務建立後 0.2 秒讀到；由 Claude session 查新聞並用 `nest-cast say` 回覆，整個來回約 70 秒，
   最花時間的是處理本身。門鈴加速還沒實測到。
-- 需要個人帳號的 `tasks.readonly` scope，以及該 GCP 專案啟用 Tasks API。
+- 處理流程：讀到任務 → 做事 → `nest-cast say` 回覆成功 → `finish_task.py` 刪掉該任務，不留在 Tasks 裡。
+  回覆失敗就不刪，留著當作「沒做完」的紀錄。`finish_task.py` 只刪標題以「機器人」開頭的任務，其他一律拒絕。
+- 需要個人帳號的 `tasks` scope（要能刪除，唯讀不夠），以及該 GCP 專案啟用 Tasks API。
+  重新授權後若仍回報 scope 不足，把 `token_cache.json` 移開，讓 gws 重新拿 token。
